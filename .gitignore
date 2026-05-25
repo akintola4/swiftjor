@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Editor / tooling
+/.claude
+
+# Xcode user data
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+*.xcscmblueprint
+*.xccheckout
+
+# Build artifacts
+build/
+DerivedData/
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Packages/
+Package.pins
+
+# CocoaPods
+Pods/
+
+# Carthage
+Carthage/Build/
+
+# Secrets — xcconfig (contains API keys in this project)
+*.xcconfig
+
+# Env files
+.env
+.env.*
+!.env.example
