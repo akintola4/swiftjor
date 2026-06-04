@@ -80,7 +80,7 @@ struct LockView: View {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 40, weight: .semibold))
                 Text("Locked")
-                    .font(Theme.serif(.title2).weight(.semibold))
+                    .font(Theme.display(.title2).weight(.semibold))
                 Button(action: onUnlock) {
                     Label("Unlock", systemImage: "faceid")
                         .font(.headline)

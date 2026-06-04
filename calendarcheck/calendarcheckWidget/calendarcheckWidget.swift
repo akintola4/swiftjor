@@ -123,7 +123,7 @@ struct MonthWidgetView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(grid.name(calendar: calendar))
-                    .font(Theme.serif(.headline).weight(.semibold))
+                    .font(Theme.display(.headline).weight(.semibold))
                 Spacer()
                 Text("\(entry.monthCount)")
                     .font(.subheadline.weight(.semibold))
@@ -224,6 +224,269 @@ struct StreakWidgetView: View {
     }
 }
 
+// MARK: - Full month (large)
+
+struct LargeWidget: Widget {
+    let kind = "calendarcheckLargeWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: CheckProvider()) { entry in
+            LargeWidgetView(entry: entry)
+                .containerBackground(.background, for: .widget)
+        }
+        .configurationDisplayName("Full Month")
+        .description("The whole month, with your total and streak.")
+        .supportedFamilies([.systemLarge])
+    }
+}
+
+struct LargeWidgetView: View {
+    let entry: CheckEntry
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    private var calendar: Calendar { CheckPersistence.calendar() }
+    private var today: DayKey { DayKey(date: entry.date, calendar: calendar) }
+    private var grid: MonthGrid { MonthGrid(year: today.year, month: today.month, calendar: calendar) }
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 4), count: 7)
+
+    private var fillColor: Color { renderingMode == .fullColor ? CheckPersistence.accentColor() : .primary }
+
+    /// Flat, uniquely-identified cells (weekday headers + blanks + days) so the
+    /// integer ids can't collide inside the LazyVGrid and drop early days.
+    private enum Cell: Identifiable {
+        case weekday(Int, String)
+        case blank(Int)
+        case day(Int)
+        var id: String {
+            switch self {
+            case .weekday(let i, _): return "wd-\(i)"
+            case .blank(let i):      return "blank-\(i)"
+            case .day(let d):        return "day-\(d)"
+            }
+        }
+    }
+
+    private var cells: [Cell] {
+        var result: [Cell] = grid.weekdaySymbols.enumerated().map { .weekday($0.offset, $0.element) }
+        result += (0..<grid.leadingBlanks).map { .blank($0) }
+        result += grid.days.map { .day($0) }
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(entry.title)
+                        .font(Theme.display(.title3).weight(.semibold))
+                        .lineLimit(1)
+                    Text("\(grid.name(calendar: calendar)) \(String(today.year))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("\(entry.days.count)")
+                        .font(.system(size: 30, weight: .bold))
+                        .monospacedDigit()
+                    Text("total days")
+                        .font(.caption2)
+                        .textCase(.uppercase)
+                        .tracking(1)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Rectangle().fill(.primary.opacity(0.15)).frame(height: 1)
+
+            Spacer(minLength: 0)
+
+            LazyVGrid(columns: columns, spacing: 6) {
+                ForEach(cells) { cell in
+                    switch cell {
+                    case .weekday(_, let symbol):
+                        Text(symbol)
+                            .font(.caption2)
+                            .textCase(.uppercase)
+                            .foregroundStyle(.tertiary)
+                    case .blank:
+                        Color.clear.aspectRatio(1, contentMode: .fit)
+                    case .day(let dayNumber):
+                        let key = DayKey(year: today.year, month: today.month, day: dayNumber)
+                        let passed = entry.days.contains(key)
+                        let isToday = key == today
+                        ZStack {
+                            if passed {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous).fill(fillColor)
+                            } else if isToday {
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(.primary.opacity(0.5), lineWidth: 1)
+                            }
+                            Text("\(dayNumber)")
+                                .font(.system(size: 13, weight: passed ? .semibold : .regular))
+                                .monospacedDigit()
+                                .minimumScaleFactor(0.5)
+                                .foregroundStyle(passed ? AnyShapeStyle(.background) : AnyShapeStyle(.primary))
+                        }
+                        .aspectRatio(1, contentMode: .fit)
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Text("\(entry.streak) day streak")
+                Spacer()
+                Text("\(entry.monthCount) this month")
+            }
+            .font(.caption2)
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
+// MARK: - Milestones (medium)
+
+struct MilestoneWidget: Widget {
+    let kind = "calendarcheckMilestoneWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: CheckProvider()) { entry in
+            MilestoneWidgetView(entry: entry)
+                .containerBackground(.background, for: .widget)
+        }
+        .configurationDisplayName("Milestones")
+        .description("The streak badges you've earned.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+struct MilestoneWidgetView: View {
+    let entry: CheckEntry
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    private var calendar: Calendar { CheckPersistence.calendar() }
+    private var accent: Color { renderingMode == .fullColor ? CheckPersistence.accentColor() : .primary }
+
+    private func label(_ m: Int) -> String {
+        switch m {
+        case 7: return "Week"
+        case 30: return "Month"
+        case 365: return "Year"
+        default: return "\(m) days"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("MILESTONES")
+                .font(.caption2)
+                .tracking(1.5)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                ForEach(CheckLogic.milestones, id: \.self) { m in
+                    let hits = CheckLogic.milestoneHits(m, passed: entry.days, calendar: calendar)
+                    let earned = hits > 0
+                    VStack(spacing: 6) {
+                        ZStack(alignment: .topTrailing) {
+                            ZStack {
+                                Circle()
+                                    .fill(earned ? AnyShapeStyle(accent) : AnyShapeStyle(.quaternary))
+                                    .frame(width: 50, height: 50)
+                                Text("\(m)")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(earned ? AnyShapeStyle(.background) : AnyShapeStyle(.secondary))
+                            }
+                            if hits > 0 {
+                                Text("×\(hits)")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.background)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .background(Capsule().fill(.primary))
+                                    .offset(x: 6, y: -2)
+                            }
+                        }
+                        Text(label(m))
+                            .font(.caption2)
+                            .foregroundStyle(earned ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Year heatmap (medium)
+
+struct HeatmapWidget: Widget {
+    let kind = "calendarcheckHeatmapWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: CheckProvider()) { entry in
+            HeatmapWidgetView(entry: entry)
+                .containerBackground(.background, for: .widget)
+        }
+        .configurationDisplayName("Year Heatmap")
+        .description("Every day this year at a glance.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+struct HeatmapWidgetView: View {
+    let entry: CheckEntry
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    private var calendar: Calendar { CheckPersistence.calendar() }
+    private var year: Int { calendar.component(.year, from: entry.date) }
+    private var accent: Color { renderingMode == .fullColor ? CheckPersistence.accentColor() : .primary }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(String(year))
+                    .font(Theme.display(.headline).weight(.semibold))
+                    .monospacedDigit()
+                Spacer()
+                Text("\(CheckLogic.daysPassed(in: entry.days, year: year)) days")
+                    .font(.caption2)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            VStack(spacing: 3) {
+                ForEach(1...12, id: \.self) { month in
+                    let last = CheckLogic.lastDay(ofYear: year, month: month, calendar: calendar)
+                    HStack(spacing: 3) {
+                        ForEach(1...31, id: \.self) { day in
+                            if day <= last {
+                                let passed = entry.days.contains(DayKey(year: year, month: month, day: day))
+                                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                                    .fill(passed ? AnyShapeStyle(accent) : AnyShapeStyle(.quaternary))
+                                    .frame(maxWidth: .infinity)
+                                    .aspectRatio(1, contentMode: .fit)
+                            } else {
+                                Color.clear
+                                    .frame(maxWidth: .infinity)
+                                    .aspectRatio(1, contentMode: .fit)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+}
+
 // MARK: - Lock Screen (accessory families)
 
 /// Lives on the Lock Screen and in StandBy. The system renders these in a vibrant,
@@ -314,6 +577,24 @@ struct LockWidgetView: View {
 
 #Preview("Streak", as: .systemSmall) {
     StreakWidget()
+} timeline: {
+    CheckEntry(date: .now, days: [DayKey(date: .now)], title: "Meditate", icon: "", streak: 5, monthCount: 12, monthlyGoal: 20)
+}
+
+#Preview("Full Month", as: .systemLarge) {
+    LargeWidget()
+} timeline: {
+    CheckEntry(date: .now, days: [DayKey(date: .now)], title: "Meditate", icon: "", streak: 5, monthCount: 12, monthlyGoal: 20)
+}
+
+#Preview("Milestones", as: .systemMedium) {
+    MilestoneWidget()
+} timeline: {
+    CheckEntry(date: .now, days: [DayKey(date: .now)], title: "Meditate", icon: "", streak: 5, monthCount: 12, monthlyGoal: 20)
+}
+
+#Preview("Heatmap", as: .systemMedium) {
+    HeatmapWidget()
 } timeline: {
     CheckEntry(date: .now, days: [DayKey(date: .now)], title: "Meditate", icon: "", streak: 5, monthCount: 12, monthlyGoal: 20)
 }

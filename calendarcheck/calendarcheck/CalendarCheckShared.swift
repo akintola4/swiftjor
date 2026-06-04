@@ -322,5 +322,8 @@ enum Theme {
     /// Continuous rounded-square corner radius for a cell of side `side`.
     static func cellCorner(_ side: CGFloat) -> CGFloat { side * 0.30 }
 
-    static func serif(_ style: Font.TextStyle) -> Font { .system(style, design: .serif) }
+    /// The display face for headlines (habit title, month/year names). SF Rounded —
+    /// soft and warm, the app's only "voice" font. Data/numerals stay default SF with
+    /// `.monospacedDigit()`. Swap the `design:` here to restyle every headline at once.
+    static func display(_ style: Font.TextStyle) -> Font { .system(style, design: .rounded) }
 }

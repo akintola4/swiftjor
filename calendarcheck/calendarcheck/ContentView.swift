@@ -155,7 +155,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 8) {
                             Text(store.habitTitle)
-                                .font(Theme.serif(.title).weight(.semibold))
+                                .font(Theme.display(.title).weight(.semibold))
                                 .foregroundStyle(.primary)
                             Image(systemName: "pencil")
                                 .font(.caption)
@@ -299,7 +299,7 @@ struct MonthView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(grid.name(calendar: calendar))
-                    .font(Theme.serif(.title2).weight(.semibold))
+                    .font(Theme.display(.title2).weight(.semibold))
                 Text(String(spec.year))
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -415,7 +415,7 @@ struct DetailsEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             Text("What are you tracking?")
-                .font(Theme.serif(.title2).weight(.semibold))
+                .font(Theme.display(.title2).weight(.semibold))
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.top, 8)
 
@@ -495,7 +495,7 @@ struct YearView: View {
                         Spacer()
                         VStack(spacing: 2) {
                             Text(verbatim: "\(year)")
-                                .font(Theme.serif(.title2).weight(.semibold))
+                                .font(Theme.display(.title2).weight(.semibold))
                             Text("\(total) day\(total == 1 ? "" : "s") passed")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -622,7 +622,7 @@ struct DayNoteEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text(dateLabel)
-                .font(Theme.serif(.title3).weight(.semibold))
+                .font(Theme.display(.title3).weight(.semibold))
                 .padding(.top, 8)
 
             TextField("What did you do?", text: $text, axis: .vertical)
