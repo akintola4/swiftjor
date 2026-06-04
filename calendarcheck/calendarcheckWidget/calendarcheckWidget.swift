@@ -1,0 +1,199 @@
+//
+//  calendarcheckWidget.swift
+//  calendarcheckWidget
+//
+//  Two widgets, both reading the shared App Group store directly (no observation).
+//  The system applies Liquid Glass to the widget container — we don't call
+//  glassEffect here; we just keep content legible, including in accented/tinted mode.
+//
+
+import WidgetKit
+import SwiftUI
+
+// MARK: - Timeline
+
+struct CheckEntry: TimelineEntry {
+    let date: Date
+    let days: Set<DayKey>
+    let title: String
+    let icon: String
+    let streak: Int
+    let monthCount: Int
+}
+
+struct CheckProvider: TimelineProvider {
+    func placeholder(in context: Context) -> CheckEntry {
+        CheckEntry(date: Date(), days: [], title: CheckPersistence.defaultTitle, icon: "", streak: 0, monthCount: 0)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (CheckEntry) -> Void) {
+        completion(makeEntry())
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<CheckEntry>) -> Void) {
+        let cal = Calendar.current
+        let refresh = cal.nextDate(
+            after: Date(),
+            matching: DateComponents(hour: 0, minute: 1),
+            matchingPolicy: .nextTime
+        ) ?? Date().addingTimeInterval(3600)
+        completion(Timeline(entries: [makeEntry()], policy: .after(refresh)))
+    }
+
+    private func makeEntry() -> CheckEntry {
+        let cal = CheckPersistence.calendar()
+        let days = CheckPersistence.loadDays()
+        let c = cal.dateComponents([.year, .month], from: Date())
+        let monthCount = CheckLogic.daysPassed(in: days, year: c.year ?? 0, month: c.month ?? 0)
+        return CheckEntry(
+            date: Date(),
+            days: days,
+            title: CheckPersistence.loadTitle(),
+            icon: CheckPersistence.loadIcon(),
+            streak: CheckLogic.currentStreak(passed: days, calendar: cal),
+            monthCount: monthCount
+        )
+    }
+}
+
+// MARK: - Mini month calendar (medium)
+
+struct MonthWidget: Widget {
+    let kind = "calendarcheckMonthWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: CheckProvider()) { entry in
+            MonthWidgetView(entry: entry)
+                .containerBackground(.background, for: .widget)
+        }
+        .configurationDisplayName("Month")
+        .description("Your passed days this month at a glance.")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
+struct MonthWidgetView: View {
+    let entry: CheckEntry
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    private var calendar: Calendar { CheckPersistence.calendar() }
+    private var today: DayKey { DayKey(date: entry.date, calendar: calendar) }
+    private var grid: MonthGrid { MonthGrid(year: today.year, month: today.month, calendar: calendar) }
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 7)
+
+    private var fillColor: Color { renderingMode == .fullColor ? Theme.accent : .primary }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if !entry.icon.isEmpty { Text(entry.icon) }
+                Text(grid.name(calendar: calendar))
+                    .font(Theme.serif(.headline).weight(.semibold))
+                Spacer()
+                Text("\(entry.monthCount)")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+
+            LazyVGrid(columns: columns, spacing: 3) {
+                ForEach(Array(0..<grid.leadingBlanks), id: \.self) { _ in Color.clear.frame(height: 1) }
+                ForEach(grid.days, id: \.self) { dayNumber in
+                    let key = DayKey(year: today.year, month: today.month, day: dayNumber)
+                    let passed = entry.days.contains(key)
+                    let isToday = key == today
+                    ZStack {
+                        if passed {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous).fill(fillColor)
+                        } else if isToday {
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .strokeBorder(.primary.opacity(0.5), lineWidth: 1)
+                        }
+                        Text("\(dayNumber)")
+                            .font(.system(size: 11, weight: passed ? .semibold : .regular))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                            .foregroundStyle(passed ? AnyShapeStyle(.background) : AnyShapeStyle(.primary))
+                    }
+                    .aspectRatio(1, contentMode: .fit)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Streak + count (small)
+
+struct StreakWidget: Widget {
+    let kind = "calendarcheckStreakWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: CheckProvider()) { entry in
+            StreakWidgetView(entry: entry)
+                .containerBackground(.background, for: .widget)
+        }
+        .configurationDisplayName("Streak")
+        .description("Your current streak and days this month.")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
+struct StreakWidgetView: View {
+    let entry: CheckEntry
+    @Environment(\.widgetRenderingMode) private var renderingMode
+
+    private var todayPassed: Bool { entry.days.contains(DayKey(date: entry.date)) }
+    private var dotColor: Color { renderingMode == .fullColor ? Theme.accent : .primary }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                if !entry.icon.isEmpty { Text(entry.icon).font(.caption) }
+                Text(entry.title)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                if todayPassed {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(dotColor)
+                        .frame(width: 7, height: 7)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            Text("\(entry.streak)")
+                .font(.system(size: 56, weight: .bold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.5)
+            Text("day streak")
+                .font(.caption2)
+                .textCase(.uppercase)
+                .tracking(1.5)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 4)
+
+            Text("\(entry.monthCount) this month")
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Previews
+
+#Preview("Month", as: .systemMedium) {
+    MonthWidget()
+} timeline: {
+    CheckEntry(date: .now, days: [], title: "Meditate", icon: "", streak: 0, monthCount: 0)
+}
+
+#Preview("Streak", as: .systemSmall) {
+    StreakWidget()
+} timeline: {
+    CheckEntry(date: .now, days: [DayKey(date: .now)], title: "Meditate", icon: "", streak: 5, monthCount: 12)
+}

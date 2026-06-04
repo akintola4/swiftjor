@@ -14,6 +14,7 @@ My SwiftUI learning playground — a collection of small Xcode projects, each ex
 | `cryptoApp` | Networking — `async/await` fetch, `ObservableObject` view model, API key handling |
 | `weatherapp` | API consumption with a secrets decoder |
 | `CamTest` | Camera + photo library — capture view, gallery grid, photo detail |
+| `calendarcheck` | Habit check tracker — Liquid Glass UI, WidgetKit (2 widgets), App Group sharing, local notifications, `@Observable` |
 
 ## Structure
 
