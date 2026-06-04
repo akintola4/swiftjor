@@ -29,6 +29,7 @@ final class AppSettings {
     var habitIcon: String { didSet { defaults.set(habitIcon, forKey: SettingsKeys.habitIcon); reloadWidgets() } }
     var weekStartsMonday: Bool { didSet { defaults.set(weekStartsMonday, forKey: SettingsKeys.weekStartsMonday); reloadWidgets() } }
     var appearance: Appearance { didSet { defaults.set(appearance.rawValue, forKey: SettingsKeys.appearance) } }
+    var accent: AccentChoice { didSet { defaults.set(accent.rawValue, forKey: SettingsKeys.accent); reloadWidgets() } }
     var monthlyGoal: Int { didSet { defaults.set(monthlyGoal, forKey: SettingsKeys.monthlyGoal) } }
     var haptics: Bool { didSet { defaults.set(haptics, forKey: SettingsKeys.haptics) } }
     var appLock: Bool { didSet { defaults.set(appLock, forKey: SettingsKeys.appLock) } }
@@ -47,6 +48,7 @@ final class AppSettings {
         habitIcon = defaults.string(forKey: SettingsKeys.habitIcon) ?? ""
         weekStartsMonday = CheckPersistence.weekStartsMonday(from: defaults)
         appearance = Appearance(rawValue: defaults.string(forKey: SettingsKeys.appearance) ?? "") ?? .system
+        accent = AccentChoice(rawValue: defaults.string(forKey: SettingsKeys.accent) ?? "") ?? .vermilion
         monthlyGoal = defaults.integer(forKey: SettingsKeys.monthlyGoal)
         haptics = defaults.object(forKey: SettingsKeys.haptics) as? Bool ?? true
         appLock = defaults.bool(forKey: SettingsKeys.appLock)

@@ -68,15 +68,14 @@ struct SettingsView: View {
 
     private var personalizationSection: some View {
         Section("Personalization") {
-            HStack {
-                Text("Icon")
-                Spacer()
-                TextField("Add", text: $settings.habitIcon)
-                    .multilineTextAlignment(.trailing)
-                    .frame(width: 60)
-                    .onChange(of: settings.habitIcon) { _, new in
-                        if let last = new.last { settings.habitIcon = String(last) }
+            Picker("Check color", selection: $settings.accent) {
+                ForEach(AccentChoice.allCases) { choice in
+                    HStack {
+                        Circle().fill(choice.color).frame(width: 14, height: 14)
+                        Text(choice.label)
                     }
+                    .tag(choice)
+                }
             }
             Picker("Appearance", selection: $settings.appearance) {
                 ForEach(Appearance.allCases) { Text($0.label).tag($0) }
@@ -101,7 +100,7 @@ struct SettingsView: View {
                 } currentValueLabel: {
                     Text("\(done) / \(settings.monthlyGoal)").monospacedDigit()
                 }
-                .tint(Theme.accent)
+                .tint(settings.accent.color)
             }
         }
     }

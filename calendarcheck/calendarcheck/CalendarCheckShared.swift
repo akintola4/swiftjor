@@ -39,6 +39,13 @@ struct DayKey: Hashable, Codable {
     func date(in calendar: Calendar = .current) -> Date? {
         calendar.date(from: DateComponents(year: year, month: month, day: day))
     }
+
+    /// Stable string key for dictionaries / JSON (e.g. day notes).
+    var storageKey: String { "\(year)-\(month)-\(day)" }
+}
+
+extension DayKey: Identifiable {
+    var id: String { storageKey }
 }
 
 // MARK: - Persistence (App Group)
@@ -52,6 +59,7 @@ enum CheckPersistence {
     private static let daysKey = "passedDays"
     private static let titleKey = "habitTitle"
     private static let noteKey = "habitNote"
+    private static let dayNotesKey = "dayNotes"
 
     /// The App Group suite. On the Simulator this resolves even without portal
     /// provisioning. Falls back to `.standard` only if the suite can't be opened
@@ -86,6 +94,20 @@ enum CheckPersistence {
         defaults.set(note, forKey: noteKey)
     }
 
+    // Per-day notes, keyed by DayKey.storageKey.
+
+    static func loadDayNotes(from defaults: UserDefaults = shared) -> [String: String] {
+        guard let data = defaults.data(forKey: dayNotesKey),
+              let decoded = try? JSONDecoder().decode([String: String].self, from: data)
+        else { return [:] }
+        return decoded
+    }
+
+    static func saveDayNotes(_ notes: [String: String], to defaults: UserDefaults = shared) {
+        guard let data = try? JSONEncoder().encode(notes) else { return }
+        defaults.set(data, forKey: dayNotesKey)
+    }
+
     // Settings that the widget also needs to read directly.
 
     static func loadIcon(from defaults: UserDefaults = shared) -> String {
@@ -105,6 +127,31 @@ enum CheckPersistence {
         c.firstWeekday = weekStartsMonday(from: defaults) ? 2 : 1
         return c
     }
+
+    /// The chosen check color (used by the widget, which has no AppSettings).
+    static func accentColor(from defaults: UserDefaults = shared) -> Color {
+        (AccentChoice(rawValue: defaults.string(forKey: SettingsKeys.accent) ?? "") ?? .vermilion).color
+    }
+}
+
+/// The curated palette for the check color.
+enum AccentChoice: String, CaseIterable, Identifiable {
+    case vermilion, amber, green, cobalt, violet, pink, ink
+
+    var id: String { rawValue }
+    var label: String { rawValue.capitalized }
+
+    var color: Color {
+        switch self {
+        case .vermilion: return Color(red: 0.91, green: 0.27, blue: 0.13)
+        case .amber:     return Color(red: 0.95, green: 0.62, blue: 0.07)
+        case .green:     return Color(red: 0.20, green: 0.65, blue: 0.33)
+        case .cobalt:    return Color(red: 0.15, green: 0.39, blue: 0.92)
+        case .violet:    return Color(red: 0.49, green: 0.23, blue: 0.93)
+        case .pink:      return Color(red: 0.86, green: 0.15, blue: 0.47)
+        case .ink:       return Color.primary
+        }
+    }
 }
 
 /// UserDefaults keys for settings (shared so the widget can read the relevant ones).
@@ -117,6 +164,7 @@ enum SettingsKeys {
     static let monthlySummary = "monthlySummary"
     static let yearlySummary = "yearlySummary"
     static let appearance = "appearance"
+    static let accent = "accentColor"
     static let monthlyGoal = "monthlyGoal"
     static let haptics = "haptics"
     static let appLock = "appLock"
@@ -164,6 +212,9 @@ enum CheckLogic {
         passed.filter { $0.year == year }.count
     }
 
+    /// Streak lengths worth celebrating.
+    static let milestones = [7, 30, 100, 365]
+
     /// Longest run of consecutive passed days, anywhere in the history.
     static func longestStreak(passed: Set<DayKey>, calendar: Calendar = .current) -> Int {
         let dates = passed
@@ -181,6 +232,32 @@ enum CheckLogic {
             longest = max(longest, run)
         }
         return longest
+    }
+
+    /// Lengths of every consecutive run in the history (for counting milestone hits).
+    static func allStreaks(passed: Set<DayKey>, calendar: Calendar = .current) -> [Int] {
+        let dates = passed
+            .compactMap { $0.date(in: calendar).map { calendar.startOfDay(for: $0) } }
+            .sorted()
+        guard !dates.isEmpty else { return [] }
+        var runs: [Int] = []
+        var run = 1
+        for i in 1..<dates.count {
+            if let next = calendar.date(byAdding: .day, value: 1, to: dates[i - 1]),
+               calendar.isDate(next, inSameDayAs: dates[i]) {
+                run += 1
+            } else {
+                runs.append(run)
+                run = 1
+            }
+        }
+        runs.append(run)
+        return runs
+    }
+
+    /// How many separate streaks reached at least `milestone` days.
+    static func milestoneHits(_ milestone: Int, passed: Set<DayKey>, calendar: Calendar = .current) -> Int {
+        allStreaks(passed: passed, calendar: calendar).filter { $0 >= milestone }.count
     }
 
     /// The month with the most checks, if any.

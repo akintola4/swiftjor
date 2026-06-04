@@ -9,6 +9,23 @@
 
 import WidgetKit
 import SwiftUI
+import AppIntents
+
+// MARK: - Interactive toggle
+
+struct ToggleTodayIntent: AppIntent {
+    static var title: LocalizedStringResource = "Toggle today's check"
+
+    func perform() async throws -> some IntentResult {
+        let cal = CheckPersistence.calendar()
+        var days = CheckPersistence.loadDays()
+        let today = DayKey(date: Date(), calendar: cal)
+        if days.contains(today) { days.remove(today) } else { days.insert(today) }
+        CheckPersistence.saveDays(days)
+        WidgetCenter.shared.reloadAllTimelines()
+        return .result()
+    }
+}
 
 // MARK: - Timeline
 
@@ -81,12 +98,28 @@ struct MonthWidgetView: View {
     private var grid: MonthGrid { MonthGrid(year: today.year, month: today.month, calendar: calendar) }
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: 7)
 
-    private var fillColor: Color { renderingMode == .fullColor ? Theme.accent : .primary }
+    private var fillColor: Color { renderingMode == .fullColor ? CheckPersistence.accentColor() : .primary }
+
+    /// Flat, uniquely-identified cells so the leading blanks and day numbers can't
+    /// collide on integer ids inside the LazyVGrid (which would drop the early days).
+    private enum Cell: Identifiable {
+        case blank(Int)
+        case day(Int)
+        var id: String {
+            switch self {
+            case .blank(let i): return "blank-\(i)"
+            case .day(let d):   return "day-\(d)"
+            }
+        }
+    }
+
+    private var cells: [Cell] {
+        (0..<grid.leadingBlanks).map { Cell.blank($0) } + grid.days.map { Cell.day($0) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                if !entry.icon.isEmpty { Text(entry.icon) }
                 Text(grid.name(calendar: calendar))
                     .font(Theme.serif(.headline).weight(.semibold))
                 Spacer()
@@ -97,26 +130,30 @@ struct MonthWidgetView: View {
             }
 
             LazyVGrid(columns: columns, spacing: 3) {
-                ForEach(Array(0..<grid.leadingBlanks), id: \.self) { _ in Color.clear.frame(height: 1) }
-                ForEach(grid.days, id: \.self) { dayNumber in
-                    let key = DayKey(year: today.year, month: today.month, day: dayNumber)
-                    let passed = entry.days.contains(key)
-                    let isToday = key == today
-                    ZStack {
-                        if passed {
-                            RoundedRectangle(cornerRadius: 5, style: .continuous).fill(fillColor)
-                        } else if isToday {
-                            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                                .strokeBorder(.primary.opacity(0.5), lineWidth: 1)
+                ForEach(cells) { cell in
+                    switch cell {
+                    case .blank:
+                        Color.clear.aspectRatio(1, contentMode: .fit)
+                    case .day(let dayNumber):
+                        let key = DayKey(year: today.year, month: today.month, day: dayNumber)
+                        let passed = entry.days.contains(key)
+                        let isToday = key == today
+                        ZStack {
+                            if passed {
+                                RoundedRectangle(cornerRadius: 5, style: .continuous).fill(fillColor)
+                            } else if isToday {
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .strokeBorder(.primary.opacity(0.5), lineWidth: 1)
+                            }
+                            Text("\(dayNumber)")
+                                .font(.system(size: 11, weight: passed ? .semibold : .regular))
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.5)
+                                .foregroundStyle(passed ? AnyShapeStyle(.background) : AnyShapeStyle(.primary))
                         }
-                        Text("\(dayNumber)")
-                            .font(.system(size: 11, weight: passed ? .semibold : .regular))
-                            .monospacedDigit()
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.5)
-                            .foregroundStyle(passed ? AnyShapeStyle(.background) : AnyShapeStyle(.primary))
+                        .aspectRatio(1, contentMode: .fit)
                     }
-                    .aspectRatio(1, contentMode: .fit)
                 }
             }
         }
@@ -133,8 +170,8 @@ struct StreakWidget: Widget {
             StreakWidgetView(entry: entry)
                 .containerBackground(.background, for: .widget)
         }
-        .configurationDisplayName("Streak")
-        .description("Your current streak and days this month.")
+        .configurationDisplayName("Total")
+        .description("Your total days and a tap-to-check button.")
         .supportedFamilies([.systemSmall])
     }
 }
@@ -144,30 +181,31 @@ struct StreakWidgetView: View {
     @Environment(\.widgetRenderingMode) private var renderingMode
 
     private var todayPassed: Bool { entry.days.contains(DayKey(date: entry.date)) }
-    private var dotColor: Color { renderingMode == .fullColor ? Theme.accent : .primary }
+    private var dotColor: Color { renderingMode == .fullColor ? CheckPersistence.accentColor() : .primary }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 6) {
-                if !entry.icon.isEmpty { Text(entry.icon).font(.caption) }
                 Text(entry.title)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                if todayPassed {
-                    RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .fill(dotColor)
-                        .frame(width: 7, height: 7)
+                Spacer(minLength: 0)
+                Button(intent: ToggleTodayIntent()) {
+                    Image(systemName: todayPassed ? "checkmark.circle.fill" : "circle")
+                        .font(.title3)
+                        .foregroundStyle(todayPassed ? AnyShapeStyle(dotColor) : AnyShapeStyle(.secondary))
                 }
+                .buttonStyle(.plain)
             }
 
             Spacer(minLength: 0)
 
-            Text("\(entry.streak)")
+            Text("\(entry.days.count)")
                 .font(.system(size: 56, weight: .bold))
                 .monospacedDigit()
                 .minimumScaleFactor(0.5)
-            Text("day streak")
+            Text("total days")
                 .font(.caption2)
                 .textCase(.uppercase)
                 .tracking(1.5)
