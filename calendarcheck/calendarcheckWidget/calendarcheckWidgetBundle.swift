@@ -13,5 +13,6 @@ struct calendarcheckWidgetBundle: WidgetBundle {
     var body: some Widget {
         MonthWidget()
         StreakWidget()
+        LockWidget()
     }
 }

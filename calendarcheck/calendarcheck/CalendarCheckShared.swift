@@ -114,6 +114,10 @@ enum CheckPersistence {
         defaults.string(forKey: SettingsKeys.habitIcon) ?? ""
     }
 
+    static func loadMonthlyGoal(from defaults: UserDefaults = shared) -> Int {
+        defaults.integer(forKey: SettingsKeys.monthlyGoal)
+    }
+
     static func weekStartsMonday(from defaults: UserDefaults = shared) -> Bool {
         if defaults.object(forKey: SettingsKeys.weekStartsMonday) == nil {
             return Calendar.current.firstWeekday == 2

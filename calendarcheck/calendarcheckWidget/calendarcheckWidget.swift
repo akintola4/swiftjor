@@ -36,11 +36,12 @@ struct CheckEntry: TimelineEntry {
     let icon: String
     let streak: Int
     let monthCount: Int
+    let monthlyGoal: Int
 }
 
 struct CheckProvider: TimelineProvider {
     func placeholder(in context: Context) -> CheckEntry {
-        CheckEntry(date: Date(), days: [], title: CheckPersistence.defaultTitle, icon: "", streak: 0, monthCount: 0)
+        CheckEntry(date: Date(), days: [], title: CheckPersistence.defaultTitle, icon: "", streak: 0, monthCount: 0, monthlyGoal: 0)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (CheckEntry) -> Void) {
@@ -68,7 +69,8 @@ struct CheckProvider: TimelineProvider {
             title: CheckPersistence.loadTitle(),
             icon: CheckPersistence.loadIcon(),
             streak: CheckLogic.currentStreak(passed: days, calendar: cal),
-            monthCount: monthCount
+            monthCount: monthCount,
+            monthlyGoal: CheckPersistence.loadMonthlyGoal()
         )
     }
 }
@@ -222,16 +224,108 @@ struct StreakWidgetView: View {
     }
 }
 
+// MARK: - Lock Screen (accessory families)
+
+/// Lives on the Lock Screen and in StandBy. The system renders these in a vibrant,
+/// largely monochrome mode, so we lean on shape and the day number rather than the
+/// accent hue (which is desaturated here anyway). Tapping checks today via the
+/// shared intent.
+struct LockWidget: Widget {
+    let kind = "calendarcheckLockWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: CheckProvider()) { entry in
+            LockWidgetView(entry: entry)
+                .containerBackground(.clear, for: .widget)
+        }
+        .configurationDisplayName("Lock Screen")
+        .description("A check-today control for your Lock Screen.")
+        .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
+    }
+}
+
+struct LockWidgetView: View {
+    let entry: CheckEntry
+    @Environment(\.widgetFamily) private var family
+
+    private var todayPassed: Bool { entry.days.contains(DayKey(date: entry.date)) }
+
+    /// Denominator for the ring: the monthly goal if set, otherwise the days in
+    /// the current month.
+    private var goalTotal: Int {
+        if entry.monthlyGoal > 0 { return entry.monthlyGoal }
+        let cal = CheckPersistence.calendar()
+        let c = cal.dateComponents([.year, .month], from: entry.date)
+        return CheckLogic.lastDay(ofYear: c.year ?? 0, month: c.month ?? 0, calendar: cal)
+    }
+
+    var body: some View {
+        switch family {
+        case .accessoryCircular:
+            Gauge(value: Double(min(entry.monthCount, goalTotal)), in: 0...Double(max(goalTotal, 1))) {
+                Image(systemName: "checkmark")
+            } currentValueLabel: {
+                Text("\(entry.monthCount)").monospacedDigit()
+            }
+            .gaugeStyle(.accessoryCircular)
+
+        case .accessoryInline:
+            // Inline sits next to the clock: icon + count only.
+            Label("\(entry.monthCount) this month", systemImage: todayPassed ? "checkmark.circle.fill" : "circle")
+
+        case .accessoryRectangular:
+            // Narrow family: lean on the three available lines, keep the toggle small.
+            HStack(spacing: 6) {
+                Button(intent: ToggleTodayIntent()) {
+                    Image(systemName: todayPassed ? "checkmark.circle.fill" : "circle")
+                        .font(.body)
+                }
+                .buttonStyle(.plain)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(entry.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text("\(entry.streak) day streak")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text("\(entry.monthCount) this month")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+        default:
+            Text("\(entry.monthCount)").monospacedDigit()
+        }
+    }
+}
+
 // MARK: - Previews
 
 #Preview("Month", as: .systemMedium) {
     MonthWidget()
 } timeline: {
-    CheckEntry(date: .now, days: [], title: "Meditate", icon: "", streak: 0, monthCount: 0)
+    CheckEntry(date: .now, days: [], title: "Meditate", icon: "", streak: 0, monthCount: 0, monthlyGoal: 0)
 }
 
 #Preview("Streak", as: .systemSmall) {
     StreakWidget()
 } timeline: {
-    CheckEntry(date: .now, days: [DayKey(date: .now)], title: "Meditate", icon: "", streak: 5, monthCount: 12)
+    CheckEntry(date: .now, days: [DayKey(date: .now)], title: "Meditate", icon: "", streak: 5, monthCount: 12, monthlyGoal: 20)
+}
+
+#Preview("Lock circular", as: .accessoryCircular) {
+    LockWidget()
+} timeline: {
+    CheckEntry(date: .now, days: [DayKey(date: .now)], title: "Meditate", icon: "", streak: 5, monthCount: 12, monthlyGoal: 20)
+}
+
+#Preview("Lock rectangular", as: .accessoryRectangular) {
+    LockWidget()
+} timeline: {
+    CheckEntry(date: .now, days: [DayKey(date: .now)], title: "Meditate", icon: "", streak: 5, monthCount: 12, monthlyGoal: 20)
 }
